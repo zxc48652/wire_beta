@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>線材庫存異動表單</title>
+<style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f2f4f8;
+      padding: 20px;
+      max-width: 480px;
+      margin: auto;
+    }
+    .form-card {
+      background: linear-gradient(180deg, #ffffff, #f8f9fb);
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+    }
+    h2 {
+      text-align: center;
+      color: #004080;
+    }
+    label {
+      margin-top: 16px;
+      display: block;
+      font-weight: bold;
+      color: #333;
+    }
+    input, select, textarea {
+      width: 100%;
+      padding: 12px;
+      margin-top: 4px;
+      font-size: 16px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      box-sizing: border-box;
+      appearance: none; /*讓 iPhone 也統一樣式*/
+      -webkit-appearance: none;
+      -moz-appearance: none;
+    }
+    /*讓下拉式選單有箭頭符號*/
+    select{
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      background: url('data:image/svg+xml;utf8,<svg fill="gray" height="18" viewBox="0 0 24 24" width="18" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>') no-repeat right 12px center;
+      background-size: 18px 18px;
+      padding-right: 36px; /*預留箭頭空間*/
+    }
+    button {
+      margin-top: 24px;
+      width: 100%;
+      padding: 14px;
+      font-size: 16px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+      transition: all 0.3s ease;
+    }
+    button:hover {
+      background-color: #388E3C;
+    }
+    button:active {
+      transform: scale(0.97);
+    }
+    #loadingOverlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(255, 255, 255, 0.8);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 9999;
+    }
+    .spinner {
+      border: 6px solid #f3f3f3;
+      border-top: 6px solid #2a4d8f;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    /*出入庫選擇變色提示*/
+    select#io.in {
+      background-color: #eafaf1;
+      border-color: #2ecc71;
+    }
+    select#io.out {
+      background-color: #fdecea;
+      border-color: #e74c3c;
+    }
+    /*加入CSS(控制外觀)＋－案紐*/
+    .quantity-wrapper{
+      display: flex;
+      align-items: center; /*保持對齊中線*/
+      gap: 15px; /*與按鈕的間距*/
+      margin-top: 4px; /*與上欄間距*/
+    }
+    .quantity-wrapper button{
+      width: 45px; height: 45px;
+      font-size: 28px;
+      border: none;
+      border-radius: 8px;
+      background-color: #dce3f1;
+      color: #2a4d8f;
+      cursor: pointer;
+      display: flex;
+      justify-content: center; /*水平置中*/
+      align-items: center; /*垂直置中*/
+      margin-top: -3px; /*按鈕往上移*/
+    }
+    .quantity-wrapper button:active {
+      transform: scale(0.95);
+    }
+    .quantity-wrapper input.quantity-input {
+      flex: 1;
+      height: 45px;
+      text-align: center;
+      font-size: 20px;
+      padding: 10px;
+    }/*加入CSS(控制外觀)＋－案紐*/
+
+    /*美化線材選單外觀*/
+    .select2-container--default .select2-selection--single{
+      height: 48px !important;
+      font-size: 18px !important;
+      line-height: 48px !important;
+      padding: 10px 12px !important;
+      border-radius: 6px !important;
+      border: 1px solid #ccc !important;
+    }
+    .select2-results__option{
+      font-size: 16px !important;
+      padding: 10px 12px !important;
+    }
+    .select2-container--default .select2-selection--single .select2-selection__arrow{
+      top: 50% !important;
+      transform: translateY(-50%) !important;
+    }
+    .select2-search__field{ /*這一段是修改輸入欄位的大小*/
+      font-size: 18px !important;
+      height: 42px !important;
+      padding: 8px 10px !important;
+    }
+    /*美化線材選單外觀*/
+
+</style>
+<script>
+let submitted = false;
+
+function lockSubmitButton() {
+  var btn = document.getElementById("submitBtn");
+  btn.disabled = true;
+  btn.innerText = "送出中...";
+}
+
+function setToday() {
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth() + 1).padStart(2, '0');
+  const dd = String(today.getDate()).padStart(2, '0');
+  document.getElementById("date").value = yyyy + "/" + mm + "/" + dd;
+}
+
+function toggleCustomUser() {
+  const sel = document.getElementById("user_select");
+  const customBox = document.getElementById("custom_user_box");
+  if (sel.value === "其他") {
+    customBox.style.display = "block";
+    sel.name = "";
+    document.getElementById("custom_user_input").name = "user";
+  } else {
+    customBox.style.display = "none";
+    sel.name = "user";
+    document.getElementById("custom_user_input").name = "";
+  }
+}
+
+function updateUserValue() {
+  document.getElementById("user_select").value = "其他";
+}
+
+function autoSelectVendor() {
+  const vendorSelect = document.getElementById("vendor_select");
+  const option = Array.from(vendorSelect.options).find(opt => opt.value === "鑫大統電線");
+  if (option) {
+    vendorSelect.value = "鑫大統電線";
+    vendorSelect.dispatchEvent(new Event("change"));
+  }
+}
+
+function loadVendorData() {
+  const vendorSelect = document.getElementById("vendor_select");
+  const wireSelect = document.getElementById("wire_name_select");
+  const stockDisplay = document.getElementById("stock_display");
+
+  wireSelect.addEventListener("change", function() {
+    const name = this.value;
+    if (!name) {
+      stockDisplay.textContent = "";
+      return;
+    }
+    stockDisplay.textContent = "📦 查詢中...";
+    fetch("https://script.google.com/macros/s/AKfycbzJHu4-_ul0jIAptLl59eS3PpPWEbc4yqiXlJib2w-dOU42rglUaFUN3i3ax6S1ZDmu/exec?name=" + encodeURIComponent(name))
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === "success") {
+          stockDisplay.textContent = "📦 目前庫存：" + data.stock + " 丸";
+        } else {
+          stockDisplay.textContent = "📦 查詢失敗：" + JSON.stringify(data);
+        }
+      })
+      .catch(error => {
+        stockDisplay.textContent = "❗️庫存查詢失敗：" + error;
+      });
+  });
+
+  fetch("https://script.google.com/macros/s/AKfycbxIr6qvu5iLLk0PMA3hx66GF_temNzLAfrLuUmXRfSVi39g3ysYexuiB2hcMFBROt4u/exec")
+    .then(res => res.json())
+    .then(data => {
+      if (data.status === "success") {
+        vendorSelect.innerHTML = '<option value="">請選擇廠商</option>';
+        wireSelect.innerHTML = '<option value="">請選擇線材</option>';
+
+        Object.keys(data.data).forEach(vendor => {
+          vendorSelect.innerHTML += `<option value="${vendor}">${vendor}</option>`;
+        });
+
+        vendorSelect.addEventListener("change", function() {
+          const vendor = this.value;
+          wireSelect.innerHTML = "";
+          const defaultOption = document.createElement('option');
+          defaultOption.value = "";
+          defaultOption.textContent = "請選擇線材";
+          wireSelect.appendChild(defaultOption);
+          stockDisplay.textContent = "";
+
+          if (data.data[vendor]) {
+            data.data[vendor].forEach(wire => {
+              const option = document.createElement('option');
+              option.value = wire;
+              option.textContent = wire;
+              wireSelect.appendChild(option);
+            });
+            $('#wire_name_select').trigger('change'); //讓select2自動更新選單內容
+          }
+        });
+
+        autoSelectVendor();
+      }
+    })
+    .catch(error => {
+      console.error("載入廠商資料失敗：", error);
+    })
+    .finally(() => {
+      document.getElementById("loadingOverlay").style.display = "none";
+    });
+}
+/*出入庫選擇變色提示*/
+function updateIoStyle(selectE1){
+  selectE1.classList.remove("in","out");
+  if (selectE1.value === "入庫"){
+    selectE1.classList.add("in");
+  }else if (selectE1.value === "出庫"){
+    selectE1.classList.add("out");
+  }
+}
+
+/*加入JavaScript(控制按鈕功能)*/
+document.addEventListener("DOMContentLoaded",function(){
+  const decrementBtn = document.querySelector(".decrement");
+  const incrementBtn = document.querySelector(".increment");
+  const qtyInput = document.querySelector(".quantity-input");
+
+  decrementBtn.addEventListener("click",function(){
+    const current = parseInt(qtyInput.value) || 1;
+    if (current > 1) qtyInput.value =current -1;
+  });
+
+  incrementBtn.addEventListener("click",function(){
+    const current = parseInt(qtyInput.value) || 0;
+    qtyInput.value = current + 1;
+  });
+});
+/*加入JavaScript(控制按鈕功能)*/
+window.onload = function() {
+  setToday();
+  loadVendorData();
+  //加上select2
+  $('#wire_name_select').select2({
+    placeholder:"請選擇線材",
+    width:'100%'
+  });
+};
+</script>
+<!-- Select2 CSS-->
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<!-- jQuery (Select2 依賴)-->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<!-- Select2 JS-->
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+</head>
+<body>
+<div id="loadingOverlay">
+  <div class="spinner"></div>
+  <p style="margin-top: 12px; color: #2a4d8f;">資料載入中...</p>
+</div>
+<div class="form-card">
+<h2 style="margin-bottom: 4px;">瑞鑫電子科技有限公司</h2><p style="text-align:center; margin-top: 0; font-size: 16px; color: #555;">📋 線材進銷存表單</p>
+<form action="https://script.google.com/macros/s/AKfycbxaLrj4P178mILRkg_kuK_ObWCZ35KjEEi26WI6USHBF_VDGZeQPEkPMBZmbYCumroE/exec" method="POST" onsubmit="lockSubmitButton(); submitted=true;" target="hidden_iframe">
+<label>📆 日期</label>
+<input id="date" name="date" readonly="readonly" style="background-color: #f0f0f0; color: #666;" type="text"/>
+<label>廠商名稱</label>
+<select id="vendor_select" name="vendor" required="">
+<option value="">請選擇廠商</option>
+</select>
+<label>線材名稱</label>
+<select id="wire_name_select" name="wire_name" required="">
+<option value="">請選擇線材</option>
+</select>
+<div id="stock_display" style="margin-top: 8px; font-size: 14px; color: #2a4d8f;"></div>
+<label>數量</label>
+<div class="quantity-wrapper">
+  <button type="button" class="decrement">-</button>
+  <input inputmode="numeric" min="1" name="qty" required type="number" class="quantity-input" placeholder="請輸入數量"/>
+  <button type="button" class="increment">+</button>
+</div>
+<label>📦 出/入庫</label>
+<select id="io" name="io" required onchange="updateIoStyle(this)"> 
+<option value="">請選擇...</option>
+<option value="入庫">入庫</option>
+<option value="出庫">出庫</option>
+</select>
+<label>👤 領料人員</label>
+<select id="user_select" name="user" onchange="toggleCustomUser()" required="">
+<option value="">請選擇領料人員</option>
+<option value="黃阿鬆">黃阿鬆</option>
+<option value="陳鈞維">陳鈞維</option>
+<option value="黃密">黃密</option>
+<option value="其他">其他</option>
+</select>
+<div id="custom_user_box" style="display:none; margin-top:8px;">
+<input id="custom_user_input" oninput="updateUserValue()" placeholder="請輸入姓名" type="text"/>
+</div>
+<label>備註</label>
+<textarea name="note" placeholder="其他補充說明（可選填）" rows="2"></textarea>
+<button id="submitBtn" type="submit">送出</button>
+</form>
+</div>
+<iframe name="hidden_iframe" onload="if(submitted) { alert('✅ 已成功送出'); window.location.reload(); }" style="display:none;"></iframe>
+</body>
+</html>
